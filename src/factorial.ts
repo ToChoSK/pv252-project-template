@@ -4,4 +4,6 @@ export function factorial(n:number):number {
   return n*factorial(n-1);
 }
 
-export function initFactorialUi(component:HTMLElement){component.innerHTML=`Factorial value <code>5!</code> is <code>${factorial(5)}</code>.`;}
+export function initFactorialUi(component: string) { // Type error: component should be HTMLElement
+  component.innerHTML = `Factorial value <code>5!</code> is <code>${factorial(5)}</code>.`; // Error: 'string' does not have 'innerHTML'
+}
