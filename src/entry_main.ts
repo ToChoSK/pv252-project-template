@@ -1,39 +1,23 @@
-import {
-  allComponents,
-  provideFluentDesignSystem,
-} from "@fluentui/web-components";
-import UIkit from "uikit";
-import { HashElement } from "./hash_element.js";
+import { initMenu } from "./menu.ts";
+import { loadFamousPeople, renderPerson } from "./famous_people.ts";
 
-const kit = UIkit as unknown as typeof UIkit.default;
-provideFluentDesignSystem().register(allComponents);
+initMenu(document.querySelector<HTMLElement>(".main-menu")!, "menu-home");
 
-const upload = document.getElementById("sha-upload-input")! as HTMLInputElement;
+const start = performance.now();
 
-function processFile(file: File) {
-  if (file.size > 100_000_000) {
-    kit.notification({
-      message: `File "${file.name}" is too large.`,
-      status: "danger",
-      pos: "bottom-right",
-    });
-  } else {
-    const el = new HashElement(file);
-    document.getElementById("sha-digests")!.prepend(el);
-  }
+const people = loadFamousPeople();
+
+const data_loaded = performance.now();
+
+const naive_list: HTMLElement = document.getElementById("naive-list")!;
+for (const person of people.slice(0, 100)) {
+  naive_list.appendChild(renderPerson(person));
 }
 
-function onFiles() {
-  const fileList = upload.files;
-  if (fileList !== null) {
-    for (let i = 0; i < fileList.length; i++) {
-      const item = fileList.item(i);
-      if (item !== null) {
-        processFile(item);
-      }
-    }
-  }
-  upload.value = "";
-}
+const finished = performance.now();
 
-upload.addEventListener("change", onFiles);
+console.log(
+  "Main site initialized...",
+  data_loaded - start,
+  finished - data_loaded,
+);
