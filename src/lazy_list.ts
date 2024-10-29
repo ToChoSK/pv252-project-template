@@ -1,22 +1,15 @@
 const template = document.createElement("template");
 template.innerHTML = `
 <style>
-#list {
-  height: var(--height);
-  width: var(--width);  
-  border: var(--border);
-  padding: var(--padding);
-  overflow: scroll;
-  scrollbar-width: none;
-}
-#spacer-top {
-  width: 100%;
-  height: 0px;
-}
-#spacer-bottom {
-  width: 100%;
-  height: 1000px;
-}
+  #list {
+    height: 400px; /* Fixed height of the list container */
+    overflow-y: scroll; /* Allow vertical scrolling */
+    width: 100%;
+    position: relative;
+  }
+  #spacer-top, #spacer-bottom {
+    width: 100%;
+  }
 </style>
 <div id="list">
   <div id="spacer-top"></div>
@@ -28,34 +21,24 @@ template.innerHTML = `
 export type Renderer<T> = (item: T) => HTMLElement;
 
 export class LazyList<T> extends HTMLElement {
-  // By default, the list renders the items as div-s with strings in them.
   #renderFunction: Renderer<T> = (item) => {
     const element = document.createElement("div");
     element.innerText = JSON.stringify(item);
     return element;
   };
 
-  // These could be useful properties to consider, but not mandatory to use.
-  // Similarly, feel free to edit the shadow DOM template in any way you want.
-
-  // By default, the list is empty.
   #data: T[] = [];
-
-  // The index of the first visible data item.
-  #visiblePosition: number = 0;
-
-  // The amount of space that needs to be shown before the first visible item.
-  #topOffset: number = 0;
+  #itemHeight: number = 50; // Roughly estimated height of each item
+  #visibleItemsCount: number = 8; // Number of items to show at a time (based on #list height and item height)
   #topOffsetElement: HTMLElement;
-  // The amount of space that needs to be shown after the last visible item.
-  #bottomOffset: number = 0;
   #bottomOffsetElement: HTMLElement;
-
-  // The container that stores the spacer elements and the slot where items are inserted.
   #listElement: HTMLElement;
 
+  // Register the LazyList component as a custom element if not already defined
   static register() {
-    customElements.define("lazy-list", LazyList);
+    if (!customElements.get("lazy-list")) {
+      customElements.define("lazy-list", LazyList);
+    }
   }
 
   constructor() {
@@ -66,58 +49,56 @@ export class LazyList<T> extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.shadowRoot.appendChild(template.content.cloneNode(true));
 
-    this.#topOffsetElement =
-      this.shadowRoot.querySelector<HTMLElement>("#spacer-top")!;
-    this.#bottomOffsetElement =
-      this.shadowRoot.querySelector<HTMLElement>("#spacer-bottom")!;
-    this.#listElement = this.shadowRoot.querySelector<HTMLElement>("#list")!;
+    // Use type assertions to specify these elements as HTMLElements
+    this.#topOffsetElement = this.shadowRoot!.querySelector(
+      "#spacer-top",
+    ) as HTMLElement;
+    this.#bottomOffsetElement = this.shadowRoot!.querySelector(
+      "#spacer-bottom",
+    ) as HTMLElement;
+    this.#listElement = this.shadowRoot!.querySelector("#list") as HTMLElement;
 
-    this.#listElement.onscroll = () => {
-      this.#scrollPositionChanged(this.#listElement.scrollTop);
-    };
-
-    // Remove this once you are actually showing some data in the list.
-    // this.innerHTML = "<span> Some content </span>"
+    // Event listener for scroll, recalculates visible items on each scroll event
+    this.#listElement.addEventListener("scroll", () => {
+      this.#updateVisibleItems();
+    });
   }
 
   setData(data: T[]) {
     this.#data = data;
-    this.#contentChanged();
+    this.#updateVisibleItems(); // Initial load of visible items
   }
 
   setRenderer(renderer: Renderer<T>) {
     this.#renderFunction = renderer;
-    this.#contentChanged();
   }
 
-  #contentChanged() {
-    // "Naive list" solution: just add all elements as children to this list,
-    // and they will be placed inside the inner <slot></slot> element.
-    // this.innerHTML = "";
-    // for (const item of this.#data) {
-    // this.#listElement.appendChild(...)
-    //  this.appendChild(this.#renderFunction(item)); // places the children
-    //}
+  #updateVisibleItems() {
+    // Determine the first visible item based on current scroll position
+    const scrollTop = this.#listElement.scrollTop;
+    const firstVisibleIndex = Math.floor(scrollTop / this.#itemHeight);
 
-    // Show only one item (for debugging, we will extend to more (visible)
-    // items later).
+    // Update top and bottom spacers based on visible items and current scroll position
+    const totalHeight = this.#data.length * this.#itemHeight;
+    const topSpacerHeight = firstVisibleIndex * this.#itemHeight;
+    const bottomSpacerHeight =
+      totalHeight -
+      topSpacerHeight -
+      this.#visibleItemsCount * this.#itemHeight;
+    this.#topOffsetElement.style.height = `${topSpacerHeight}px`;
+    this.#bottomOffsetElement.style.height = `${Math.max(0, bottomSpacerHeight)}px`;
+
+    // Clear the current visible items and re-render the necessary items
     this.innerHTML = "";
-    if (this.#data.length > 0) {
-      this.appendChild(this.#renderFunction(this.#data[0]));
+    for (let i = 0; i < this.#visibleItemsCount; i++) {
+      const index = firstVisibleIndex + i;
+      if (index < this.#data.length) {
+        const itemElement = this.#renderFunction(this.#data[index]);
+        this.appendChild(itemElement);
+      }
     }
   }
-
-  #scrollPositionChanged(topOffset: number) {
-    console.log(topOffset);
-
-    // Update the height of the top offset to match the current scroll position.
-    // The effect should be that the content stays visible in one even
-    // though the user is scrolling.
-    this.#topOffsetElement.style.height = `${topOffset}px`;
-    // Because the browser will "shift" the visible area to match the height change
-    // we just did, we need to also reset the scroll position to
-    // the one we originally observed (i.e. the one to which we are
-    // adjusting the offset).
-    this.#listElement.scrollTop = topOffset;
-  }
 }
+
+// Register the custom element
+LazyList.register();
