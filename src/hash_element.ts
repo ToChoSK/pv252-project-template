@@ -1,9 +1,5 @@
 import { FASTElement, html, observable, when } from "@microsoft/fast-element";
-import {
-  JobDoneMessage,
-  JobStartMessage,
-  ProgressMessage,
-} from "./hash_worker_messages.js";
+import { AsyncSha256 } from "./sha-256.js";
 
 /**
  * The purpose of `HashElement` is to compute the SHA256 checksum of the given file, using the
@@ -11,8 +7,6 @@ import {
  * final hash once computed.
  */
 export class HashElement extends FASTElement {
-  // Reference to the worker who is actually doing the computation.
-  #worker: Worker;
   // Time when the computation was started (to compute elapsed time).
   #started: Date;
 
@@ -45,28 +39,36 @@ export class HashElement extends FASTElement {
   constructor(file: File) {
     super();
     this.#started = new Date();
-    this.#worker = new Worker(new URL("./hash_worker.js", import.meta.url));
     this.fileName = file.name;
 
-    this.#worker.onmessage = (e) => {
-      const message = e.data;
-      this.elapsed = new Date().getTime() - this.#started.getTime();
-      if ("hash" in message) {
-        const done = message as JobDoneMessage;
-        this.hash = done.hash;
-        this.remaining = 0;
-      } else if ("remaining" in message) {
-        const progress = message as ProgressMessage;
-        this.total = progress.total;
-        this.remaining = progress.remaining;
-      }
-    };
+    // Read the file and then start computing the hash.
+    // TODO: We want to "move" this computation into a WebWorker so that it
+    // does not interfere with the rest of the UI.
+    const reader = new FileReader();
+    reader.onload = () => {
+      // The result should always be a string in this case.
+      const fileData = reader.result as string;
 
-    const message: JobStartMessage = {
-      file: file,
-    };
+      // At this point, we know how much data we have.
+      this.total = fileData.length;
 
-    this.#worker.postMessage(message);
+      const hasher = new AsyncSha256();
+      hasher.async_digest(
+        fileData,
+        (hash) => {
+          // We are done.
+          this.hash = hash;
+          this.remaining = 0;
+          this.elapsed = new Date().getTime() - this.#started.getTime();
+        },
+        (remaining) => {
+          // Update progress.
+          this.remaining = remaining;
+          this.elapsed = new Date().getTime() - this.#started.getTime();
+        },
+      );
+    };
+    reader.readAsText(file);
   }
 }
 
