@@ -1,16 +1,12 @@
-export interface HashWorkerInput {
+export type JobStartMessage = {
   file: File;
-}
+};
 
-export interface HashWorkerProgress {
-  status: "progress";
-  remaining: number;
-  total: number;
-}
-
-export interface HashWorkerResult {
-  status: "done";
+export type JobDoneMessage = {
   hash: string;
-}
+};
 
-export type HashWorkerOutput = HashWorkerProgress | HashWorkerResult | { status: "error"; message: string };
+export type ProgressMessage = {
+  total: number;
+  remaining: number;
+};
