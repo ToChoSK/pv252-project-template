@@ -1,42 +1,34 @@
-import {
-  JobDoneMessage,
-  JobStartMessage,
-  ProgressMessage,
-} from "./hash_worker_messages.js";
 import { AsyncSha256 } from "./sha-256.js";
 
-function onJobDone(hash: string): void {
-  const message: JobDoneMessage = {
-    hash: hash,
-  };
-  postMessage(message);
-}
+self.addEventListener("message", (event) => {
+  const file = event.data.file as File;
 
-function onJobProgress(total: number, remaining: number): void {
-  const message: ProgressMessage = {
-    total: total,
-    remaining: remaining,
-  };
-  postMessage(message);
-}
+  if (!file) {
+    self.postMessage({ status: "error", message: "No file provided." });
+    return;
+  }
 
-onmessage = (msg) => {
-  let data = msg.data as JobStartMessage;
-  const file = data.file;
-  onJobProgress(-1, -1);
   const reader = new FileReader();
+
   reader.onload = () => {
-    // The result should always be a string in this case.
     const fileData = reader.result as string;
-    const totalLength = fileData.length;
-    onJobProgress(fileData.length, 0);
+    const total = fileData.length;
 
     const hasher = new AsyncSha256();
     hasher.async_digest(
       fileData,
-      (hash) => onJobDone(hash),
-      (remaining) => onJobProgress(totalLength, remaining),
+      (hash) => {
+        self.postMessage({ status: "done", hash });
+      },
+      (remaining) => {
+        self.postMessage({
+          status: "progress",
+          remaining,
+          total,
+        });
+      }
     );
   };
+
   reader.readAsText(file);
-};
+});
